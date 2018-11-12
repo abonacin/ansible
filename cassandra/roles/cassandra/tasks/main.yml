@@ -1,0 +1,128 @@
+---
+
+- name: Desabilitar SELinux
+  selinux:
+    state: disabled
+  become: yes
+
+- name: Packs uteis
+  yum:
+    name: net-tools, wget, telnet, libaio
+    state: latest
+  become: yes
+# yum install -y net-tools wget telnet libaio
+
+- name: Download JDK
+  get_url:
+    url: http://download.oracle.com/otn-pub/java/jdk/8u191-b12/2787e4a523244c269598db4e85c51e0c/jdk-8u191-linux-x64.rpm
+    dest: /root/jdk-8u191-linux-x64.rpm
+    mode: 0644
+    headers: 'Cookie:oraclelicense=accept-securebackup-cookie'
+  become: yes
+#
+
+- name: Instalar Java a partir do RPM.
+  yum:
+    name: "/root/jdk-8u191-linux-x64.rpm"
+    state: present
+  become: yes
+# yum install /root/jdk-8u181-linux-x64.rpm
+
+- name: Remover Instalador RPM
+  file:
+    state: absent
+    path: "/root/jdk-8u191-linux-x64.rpm"
+# rm  -f /root/jdk-8u181-linux-x64.rpm
+
+- name: Copiar repositorios yum apache cassandra
+  template:
+    src: dse.repo
+    dest: /etc/yum.repos.d/
+  become: yes
+
+
+- name: Instalar DSE Full.
+  yum:
+    name: dse-full
+    state: present
+  become: yes
+# yum install -y dse-full
+
+- name: Criar diretorios do cassandra
+  file:
+    path: "{{item}}"
+    state: directory
+    mode: 0700
+    owner: cassandra
+    group: cassandra
+  with_items: ["/u00", "/u00/cassandra", "/u00/cassandra/data", "/u00/cassandra/commitlog", "/u00/cassandra/others"]
+  become: yes
+# mkdir -p /u00/cassandra/data /u00/cassandra/commitlog /u00/cassandra/others/hints /u00/cassandra/others/saved_caches /u00/cassandra/others/cdc_raw
+
+
+- name: Criar diretorios do cassandra others
+  file:
+    path: "{{item}}"
+    state: directory
+    mode: 0700
+    owner: cassandra
+    group: cassandra
+  with_items: ["/u00/cassandra/others/hints", "/u00/cassandra/others/saved_caches", "/u00/cassandra/others/cdc_raw"]
+  become: yes
+
+- name: Ajuste no /u00
+  shell: chown cassandra:cassandra /u00 -R
+  become: yes
+# chown cassandra: /u00 -R
+
+- name: Download JNA
+  get_url:
+    url: https://maven.java.net/content/repositories/releases/net/java/dev/jna/jna/4.1.0/jna-4.1.0.jar
+    dest: /usr/java/jdk1.8.0_191-amd64/jre/lib
+    mode: 0644
+  become: yes
+# wget  https://maven.java.net/content/repositories/releases/net/java/dev/jna/jna/4.1.0/jna-4.1.0.jar /usr/java/jdk1.8.0_181-amd64/jre/lib
+
+
+- name: Ajuste no limits
+  shell: |
+    echo "cassandra - memlock unlimited  " >> /etc/security/limits.conf
+    echo "cassandra - nofile 100000 " >> /etc/security/limits.conf
+    echo "cassandra - nproc 32768 " >> /etc/security/limits.conf
+    echo "cassandra - as unlimited " >> /etc/security/limits.conf
+  become: yes
+
+
+- name: Habilitar servico cassandra
+  systemd:
+    name: dse
+    state: stopped
+    enabled: yes
+  become: yes
+
+
+- name: Copiar cassandra.yaml
+  template:
+    src: cassandra.yaml
+    dest: /etc/dse/cassandra
+  become: yes
+
+- name: Copiar sysctl.conf
+  template:
+    src: sysctl.conf
+    dest: /etc/
+  become: yes
+
+- name: Reload sysctl
+  shell: sysctl -p
+  become: yes
+
+
+- name: Ajuste no etc hosts e cassandra yaml
+  shell: |
+   echo "{{ ansible_default_ipv4.address }}     {{ansible_hostname}}      {{ ansible_fqdn }} " >> /etc/hosts
+   echo "listen_address: {{ ansible_default_ipv4.address }} " >> /etc/dse/cassandra/cassandra.yaml
+   echo "native_transport_address: {{ ansible_default_ipv4.address }} " >> /etc/dse/cassandra/cassandra.yaml
+   echo "endpoint_snitch{{':'}} Ec2Snitch" >> /etc/dse/cassandra/cassandra.yaml
+   echo "alias alert='tail -10f /var/log/cassandra/system.log'" >> /root/.bashrc
+  become: yes

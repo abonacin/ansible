@@ -1,0 +1,9 @@
+---
+# This playbook deploys the whole application stack in this site.
+
+- name: Instalacao do cassandra
+  hosts: aza,azb
+  remote_user: centos
+
+  roles:
+    - cassandra

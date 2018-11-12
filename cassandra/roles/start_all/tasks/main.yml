@@ -1,0 +1,9 @@
+---
+
+- name: Start All
+  shell: service dse start
+  become: yes
+
+- name: Wait for join
+  pause:
+    minutes: 1
